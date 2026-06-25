@@ -1,0 +1,41 @@
+# locate-anything.cpp on Ascend NPU.
+#
+# Build:  docker compose -f docker-compose.npu.yml build
+# One-shot detect:
+#   docker compose -f docker-compose.npu.yml run --rm locate-anything-npu detect \
+#     --model /models/locate-anything-f16.gguf \
+#     --input /data/parity_image.png \
+#     --prompt "Locate all the instances that matches the following description: cat</c>remote."
+#
+# NOTE: f16 (or f32) GGUF, not the q-quants. The CANN weight-quant matmul
+# (WeightQuantBatchMatmulV2) requires a contiguous output and aborts on this
+# model's graph, so q8_0/q6_k/etc. are CPU-only. f16 is the NPU build.
+services:
+  locate-anything-npu:
+    build:
+      context: .
+      dockerfile: Dockerfile.cann
+    image: zkfz/locate-anything-npu:latest
+    # ASCEND_RT_VISIBLE_DEVICES selects which mapped NPU the runtime sees;
+    # LA_DEVICE=CANN0 then picks the first visible one.
+    environment:
+      ASCEND_RT_VISIBLE_DEVICES: '1'
+      LA_DEVICE: CANN0
+    devices:
+      - /dev/davinci1
+      - /dev/davinci_manager
+      - /dev/devmm_svm
+      - /dev/hisi_hdc
+    volumes:
+      - /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro
+      - ./models:/models
+      - ./data:/data
+    shm_size: 16gb
+    privileged: true
+    cap_add:
+      - ALL
+    group_add:
+      - video
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
